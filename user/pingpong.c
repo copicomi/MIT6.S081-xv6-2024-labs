@@ -34,7 +34,7 @@ int main (int argc, char *argv[]) {
 			exit(1);
 		}
 
-		fprintf(2, "%d: received ping\n", getpid());	
+		fprintf(1, "%d: received ping\n", getpid());	
 
 		if (write(fd_c2p[1], "L", 1) != 1) {
 			fprintf(2, "pingpong: pipe write failed\n");
@@ -62,7 +62,7 @@ int main (int argc, char *argv[]) {
 			exit(1);
 		}
 
-		fprintf(2, "%d: received pong\n", getpid());	
+		fprintf(1, "%d: received pong\n", getpid());	
 
 		close(fd_p2c[1]);
 		close(fd_c2p[0]);
