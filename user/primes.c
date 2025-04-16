@@ -24,7 +24,7 @@ void primes(int fd[]) {
 		}
 		wr = next_fd[1];
 
-		fprintf(1, "prime %d\n", p); // 输出素数 p
+		printf("prime %d\n", p); // 输出素数 p
 	}
 	else { // 末尾流
 		close(rd);
