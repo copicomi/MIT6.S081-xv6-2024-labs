@@ -16,7 +16,6 @@ int fork1(void) {
 }
 
 void debug(int argc_, char *argv_[]) {
-
 					for (int i = 0; i < argc_; i ++) {
 						printf("%s ", argv_[i]);
 
