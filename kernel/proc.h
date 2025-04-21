@@ -108,4 +108,6 @@ struct proc {
   // trace syscall
   int tracemask;
 
+  // ugetpid syscall
+  struct usyscall *usyscall;
 };
