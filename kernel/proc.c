@@ -296,6 +296,9 @@ fork(void)
   }
   np->sz = p->sz;
 
+  // copy tracemask (used in trace() system call)
+  np->tracemask = p->tracemask;
+
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
@@ -627,7 +630,6 @@ int
 killed(struct proc *p)
 {
   int k;
-  
   acquire(&p->lock);
   k = p->killed;
   release(&p->lock);

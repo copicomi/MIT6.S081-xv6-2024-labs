@@ -36,9 +36,13 @@ entry("getpid");
 entry("sbrk");
 entry("sleep");
 entry("uptime");
+
 entry("bind");
 entry("unbind");
 entry("send");
 entry("recv");
 entry("pgpte");
 entry("kpgtbl");
+
+entry("trace");
+

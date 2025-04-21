@@ -26,6 +26,7 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+
 #ifdef LAB_NET
 int bind(uint32);
 int unbind(uint32);
@@ -37,6 +38,9 @@ int ugetpid(void);
 uint64 pgpte(void*);
 void kpgtbl(void);
 #endif
+
+int trace(int);
+
 
 // ulib.c
 int stat(const char*, struct stat*);
