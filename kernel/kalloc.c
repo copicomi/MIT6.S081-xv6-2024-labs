@@ -10,6 +10,8 @@
 #include "defs.h"
 
 void freerange(void *pa_start, void *pa_end);
+void superfree(void *pa);
+void* superalloc();
 
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
@@ -21,25 +23,53 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
-} kmem;
+} kmem, supermem;
 
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+  initlock(&supermem.lock, "supermem");
   freerange(end, (void*)PHYSTOP);
 }
 
 
-
+// 分配 16 个 superpage，其余为 普通 page
 void
 freerange(void *pa_start, void *pa_end)
 {
   char *p;
   p = (char*)PGROUNDUP((uint64)pa_start);
-  for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE) {
+  for(; p + PGSIZE <= (char*)pa_end - 16 * SUPERPGSIZE; p += PGSIZE) {
     kfree(p);
   }
+
+	p = (char*)SUPERPGROUNDUP((uint64)p);
+	for (; p + SUPERPGSIZE <= (char*)pa_end; p += SUPERPGSIZE) {
+		superfree(p);
+	}
+}
+// super page 释放
+void
+superfree(void *pa)
+{
+  struct run *r;
+
+  if(((uint64)pa % SUPERPGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
+    panic("superfree");
+
+
+#ifndef LAB_SYSCALL
+  // Fill with junk to catch dangling refs.
+  memset(pa, 1, SUPERPGSIZE);
+#endif
+  
+  r = (struct run*)pa;
+
+  acquire(&supermem.lock);
+  r->next = supermem.freelist;
+  supermem.freelist = r;
+  release(&supermem.lock);
 }
 
 // Free the page of physical memory pointed at by pa,
@@ -68,6 +98,24 @@ kfree(void *pa)
   release(&kmem.lock);
 }
 
+
+void *
+superalloc(void)
+{
+  struct run *r;
+
+  acquire(&supermem.lock);
+  r = supermem.freelist;
+  if(r) {
+    supermem.freelist = r->next;
+  }
+  release(&supermem.lock);
+#ifndef LAB_SYSCALL
+  if(r)
+    memset((char*)r, 5, SUPERPGSIZE); // fill with junk
+#endif
+  return (void*)r;
+}
 
 
 // Allocate one 4096-byte page of physical memory.
