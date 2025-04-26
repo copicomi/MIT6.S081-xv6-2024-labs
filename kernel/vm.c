@@ -418,20 +418,34 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 
   for(i = 0; i < sz; i += szinc){
     szinc = PGSIZE;
-    szinc = PGSIZE;
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
-      goto err;
-    }
+
+	if (flags & PTE_S) {
+    	if((mem = superalloc()) == 0)
+      		goto err;
+    	memmove(mem, (char*)pa, SUPERPGSIZE);
+    	if(mappages(new, i, SUPERPGSIZE, (uint64)mem, flags) != 0) {
+      		superfree(mem);
+      		goto err;
+		}
+		szinc = SUPERPGSIZE;
+	}
+	else {
+    	if((mem = kalloc()) == 0)
+      		goto err;
+    	memmove(mem, (char*)pa, PGSIZE);
+    	if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0) {
+      		kfree(mem);
+      		goto err;
+    	}
+		szinc = PGSIZE;
+	}
+
   }
   return 0;
 
