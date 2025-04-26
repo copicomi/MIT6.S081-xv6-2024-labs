@@ -103,6 +103,26 @@ walk(pagetable_t pagetable, uint64 va, int option)
   if(va >= MAXVA)
     panic("walk");
 
+  if (alloc && is_superpage) { // 新建超级页
+	  pte_t *pte = &pagetable[PX(2, va)];
+	  if (*pte & PTE_V)
+		  pagetable = (pagetable_t)PTE2PA(*pte);
+	  else {
+		  if ((pagetable = (pde_t*)kalloc()) == 0) {
+			  return 0;
+		  }
+		  memset(pagetable, 0, PGSIZE);
+		  *pte = PA2PTE(pagetable) | PTE_V | PTE_R; // 标志位设置(##)
+	  }
+	  // 现在处于 level 1，下面直接 return
+	  // 让 mappage 分配 super pte
+	  pte = &pagetable[PX(1, va)];
+
+	  return pte;
+
+  }
+
+  // 查找逻辑 + 新建普通页
   for(int level = 2; level > 0; level--) {
     pte_t *pte = &pagetable[PX(level, va)];
 
@@ -119,10 +139,6 @@ walk(pagetable_t pagetable, uint64 va, int option)
 	  }
       memset(pagetable, 0, PGSIZE);
       *pte = PA2PTE(pagetable) | PTE_V;
-
-	  if (is_superpage && level == 2) {
-		  return &pagetable[PX(1, va)];
-	  }
 
     }
   }
@@ -185,20 +201,28 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 
   if(size == 0)
     panic("mappages: size");
-  
 
   	a = va;
 	last = va + size - now_pgsize;
 
   for(;;){
-    if((pte = walk(pagetable, a, 1 | (is_superpage << 1))) == 0)
+	  int walk_option = 1;
+	  if (is_superpage) {
+		  walk_option |= 2;
+	  }
+    if((pte = walk(pagetable, a, walk_option)) == 0)
       return -1;
+
     if(*pte & PTE_V)
       panic("mappages: remap");
+
     *pte = PA2PTE(pa) | perm | PTE_V;
-	 			if (*pte & PTE_S) printf("SUPER MAP !! %p \n", (void*)PTE2PA(*pte));
+
+	if (*pte & PTE_S) printf("SUPER MAP !! %p \n", (void*)PTE2PA(*pte));
+
     if(a == last)
       break;
+
     a += now_pgsize;
     pa += now_pgsize;
   }
@@ -302,7 +326,7 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
 	  if (a % SUPERPGSIZE == 0 && a + SUPERPGSIZE <= newsz) { // 分配 super page
 		  sz = SUPERPGSIZE;
 		  mem = superalloc();
-		  printf("super!!!\n");
+		  printf("superalloc: %p\n", (void*)mem);
 	  }
 	  else {
     	  sz = PGSIZE;
