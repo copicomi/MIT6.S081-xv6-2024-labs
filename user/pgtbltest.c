@@ -126,10 +126,12 @@ superpg_test()
   
   uint64 s = SUPERPGROUNDUP((uint64) end);
   supercheck(s);
+  printf("OK 1 !!\n");
   if((pid = fork()) < 0) {
     err("fork");
   } else if(pid == 0) {
     supercheck(s);
+	printf("OK 2 !!\n");
     exit(0);
   } else {
     int status;

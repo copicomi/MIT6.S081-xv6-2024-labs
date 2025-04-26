@@ -218,8 +218,6 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 
     *pte = PA2PTE(pa) | perm | PTE_V;
 
-	if (*pte & PTE_S) printf("SUPER MAP !! %p \n", (void*)PTE2PA(*pte));
-
     if(a == last)
       break;
 
@@ -268,7 +266,6 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int option)
       		kfree((void*)pa);
 		}
     }
-    *pte = 0;
 
 	if (*pte & PTE_S) {
 		sz = SUPERPGSIZE;
@@ -276,6 +273,8 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int option)
 	else {
 		sz = PGSIZE;
 	}
+
+    *pte = 0;
   }
 }
 
@@ -326,7 +325,6 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
 	  if (a % SUPERPGSIZE == 0 && a + SUPERPGSIZE <= newsz) { // 分配 super page
 		  sz = SUPERPGSIZE;
 		  mem = superalloc();
-		  printf("superalloc: %p\n", (void*)mem);
 	  }
 	  else {
     	  sz = PGSIZE;
