@@ -94,3 +94,28 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_sigalarm(void)
+{
+
+	int n;
+	uint64 handler;
+
+	argint(0, &n);
+	argaddr(1, &handler);
+
+	myproc()->ticks_wait = n;
+	myproc()->handler = (void(*)())handler;
+
+	return n;
+}
+
+uint64
+sys_sigreturn(void)
+{
+	*(myproc()->trapframe) = myproc()->sig_trapframe;
+	//myproc()->trapframe->a0 = 0;
+	myproc()->handler_running = 0;
+	return myproc()->trapframe->a0;
+}

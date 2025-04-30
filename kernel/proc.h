@@ -104,4 +104,12 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+	void(*handler)(); // 执行函数
+	int ticks_clock;  // 上次以来的时间记录
+	int ticks_wait;   // 每次执行 handler 的 ticks 间隔
+
+	struct trapframe sig_trapframe; // 用于保存 sigreturn 所需的寄存器
+
+	int handler_running;
 };

@@ -77,8 +77,26 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2) {
+
+	  p->ticks_clock ++;
+
+	  // printf("trap: clock %d\n", p->ticks_clock);
+
+	  if (p->ticks_wait > 0) {
+		  if (p->ticks_clock >= p->ticks_wait && p->handler_running == 0) {
+			  // printf("handler execute later.\n");
+			  // p->handler();
+			  // printf("handler execute successfully.\n");
+			  p->sig_trapframe = *(p->trapframe);
+			  p->trapframe->epc = (uint64)p->handler;
+		  	  p->ticks_clock = 0;
+			  p->handler_running = 1;
+		  }
+	  }
+
     yield();
+  }
 
   usertrapret();
 }
