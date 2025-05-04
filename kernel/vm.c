@@ -334,6 +334,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     }
 
 	radd((void*)pa);
+
   }
   return 0;
 
@@ -355,6 +356,14 @@ uvmclear(pagetable_t pagetable, uint64 va)
   *pte &= ~PTE_U;
 }
 
+int is_cowpage(pagetable_t pagetable, uint64 va) {
+	if (va >= MAXVA) return 0;
+	pte_t* pte = walk(pagetable, va, 0);
+	return (pte != 0
+			&& (*pte & PTE_V)
+			&& (*pte & PTE_U)
+			&& (*pte & PTE_F));
+}
 // Copy from kernel to user.
 // Copy len bytes from src to virtual address dstva in a given page table.
 // Return 0 on success, -1 on error.
@@ -368,6 +377,11 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     va0 = PGROUNDDOWN(dstva);
     if(va0 >= MAXVA)
       return -1;
+	if (is_cowpage(pagetable, va0)) {
+		if (cowalloc(pagetable, va0) != 0) {
+			return -1;
+		}
+	}
     pte = walk(pagetable, va0, 0);
     if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0 ||
        (*pte & PTE_W) == 0)
@@ -451,4 +465,30 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+
+int cowalloc(pagetable_t pagetable, uint64 va) {
+	if (!is_cowpage(pagetable, va)) {
+		return -1;
+	}
+	pte_t* pte = walk(pagetable, va, 0);
+	char *mem;
+
+	if ((mem = kalloc()) == 0) {
+		return -1;
+	}
+
+	uint64 pa = PTE2PA(*pte);
+
+	memmove(mem, (char*)pa, PGSIZE);
+
+	kfree((void*)pa);
+
+	uint flags = PTE_FLAGS(*pte);
+
+	flags = (flags | PTE_W) & ~PTE_F;
+	*pte = (PA2PTE(mem) | flags);
+
+	return 0;
 }
