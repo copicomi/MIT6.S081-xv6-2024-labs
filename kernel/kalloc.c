@@ -23,7 +23,7 @@ struct {
   struct run *freelist;
 } kmem;
 
-struct {
+struct  {
 	struct spinlock lock;
 	int cnt[PHYSTOP / PGSIZE];
 } ref;
@@ -33,7 +33,9 @@ int ref_get(void *pa) {
 }
 
 void ref_init(void *pa) {
+	acquire(&ref.lock);
 	ref.cnt[(uint64)pa / PGSIZE] = 1;
+	release(&ref.lock);
 }
 
 void ref_add(void *pa) {
@@ -59,7 +61,7 @@ freerange(void *pa_start, void *pa_end)
   p = (char*)PGROUNDUP((uint64)pa_start);
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE) {
 
-	  ref_init(p);
+	  //ref_init(p);
     kfree(p);
   }
 }

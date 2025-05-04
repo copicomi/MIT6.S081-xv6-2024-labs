@@ -5,6 +5,7 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
 
 /*
  * the kernel's page table.
@@ -14,6 +15,11 @@ pagetable_t kernel_pagetable;
 extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
+						  //
+extern struct {
+	struct spinlock lock;
+	int cnt[PHYSTOP / PGSIZE];
+} ref;
 
 // Make a direct-map page table for the kernel.
 pagetable_t
@@ -322,18 +328,19 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
-    flags = PTE_FLAGS(*pte);
 
-	if (flags & PTE_W) {
-		flags = (flags | PTE_F) & ~PTE_W;
+	if (*pte & PTE_W) {
 		*pte = (*pte | PTE_F) & ~PTE_W;
 	}
+
+    flags = PTE_FLAGS(*pte);
+
+	ref_add((char*)pa);
 
     if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
       goto err;
     }
 
-	ref_add((char*)pa);
   }
   return 0;
 
@@ -357,6 +364,7 @@ uvmclear(pagetable_t pagetable, uint64 va)
 
 int cowpage(pagetable_t pagetable, uint64 va) {
 	if (va >= MAXVA) return -1;
+	if (va >= myproc()->sz) return -1;
 	pte_t* pte = walk(pagetable, va, 0);
 
 	if (pte == 0) return -1;
@@ -367,32 +375,24 @@ int cowpage(pagetable_t pagetable, uint64 va) {
 
 void* cowalloc(pagetable_t pagetable, uint64 va) {
 	if (va % PGSIZE != 0) return 0;
+	if (va >= MAXVA) return 0;
 
 	pte_t* pte = walk(pagetable, va, 0);
 	uint64 pa = PTE2PA(*pte);
 
-	if (ref_get((void*)pa) == 1) {
-		*pte = (*pte | PTE_W) & ~PTE_F;
-		return (void*)pa;
-	}
-	else {
+	{
 		char* mem = kalloc();
 		if (mem == 0) return 0;
 
 		memmove(mem, (char*)pa, PGSIZE);
 
-		*pte &= ~PTE_V;
-
 		uint flags = PTE_FLAGS(*pte);
 		flags = (flags | PTE_W) & ~PTE_F;
 
-		if (mappages(pagetable, va, PGSIZE, (uint64)mem, flags) != 0) {
-			kfree(mem);
-			*pte |= PTE_V;
-			return 0;
-		}
+		*pte = (PA2PTE(mem) | flags);
 
 		kfree((char*)pa);
+
 		return mem;
 	}
 }
