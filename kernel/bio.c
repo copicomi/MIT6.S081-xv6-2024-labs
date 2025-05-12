@@ -59,32 +59,56 @@ bget(uint dev, uint blockno)
 
   acquire(&bcache.lock);
 
+  int hid = HASH(blockno);
   // Is the block already cached?
-  for (int i = 0; i < NBUF; ++ i) {
+  //
+  acquire(&bcache.buffer[hid].lock);
+  for (int i = hid; i < NBUF; i += NBUCKET) {
 	  b = &bcache.buf[i];
-  //for(b = bcache.head.next; b != &bcache.head; b = b->next){
     if(b->dev == dev && b->blockno == blockno){
       b->refcnt++;
+  	  release(&bcache.buffer[hid].lock);
       release(&bcache.lock);
       acquiresleep(&b->lock);
       return b;
     }
   }
+  release(&bcache.buffer[hid].lock);
 
+  acquire(&bcache.buffer[hid].lock);
+  	for (int i = hid; i < NBUF; i += NBUCKET) {
+	  	b = &bcache.buf[i];
+    	if(b->refcnt == 0) {
+      		b->dev = dev;
+      		b->blockno = blockno;
+      		b->valid = 0;
+      		b->refcnt = 1;
+  			release(&bcache.buffer[hid].lock);
+      		release(&bcache.lock);
+      		acquiresleep(&b->lock);
+      		return b;
+    	}
+  	}
+  release(&bcache.buffer[hid].lock);
   // Not cached.
   // Recycle the least recently used (LRU) unused buffer.
-  for (int i = 0; i < NBUF; ++ i) {
-	  b = &bcache.buf[i];
-  //for(b = bcache.head.prev; b != &bcache.head; b = b->prev){
-    if(b->refcnt == 0) {
-      b->dev = dev;
-      b->blockno = blockno;
-      b->valid = 0;
-      b->refcnt = 1;
-      release(&bcache.lock);
-      acquiresleep(&b->lock);
-      return b;
-    }
+  for (int k = 0; k < NBUCKET; k ++) {
+	  if (k == hid) continue;
+  	acquire(&bcache.buffer[k].lock);
+  	for (int i = k; i < NBUF; i += NBUCKET) {
+	  	b = &bcache.buf[i];
+    	if(b->refcnt == 0) {
+      		b->dev = dev;
+      		b->blockno = blockno;
+      		b->valid = 0;
+      		b->refcnt = 1;
+  			release(&bcache.buffer[k].lock);
+      		release(&bcache.lock);
+      		acquiresleep(&b->lock);
+      		return b;
+    	}
+  	}
+  	release(&bcache.buffer[k].lock);
   }
   panic("bget: no buffers");
 }
