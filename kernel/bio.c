@@ -26,6 +26,8 @@
 #define NBUCKET 13
 #define HASH(x) ((x)%(NBUCKET))
 
+extern uint ticks;
+
 struct {
   struct buf buf[NBUF];
   struct spinlock lock;
@@ -57,59 +59,59 @@ bget(uint dev, uint blockno)
 {
   struct buf *b;
 
-  acquire(&bcache.lock);
+  uint have_space = 0;
+  uint min_timestamp = 0xffffffffu;
+  int select_i = 0;
+
+  // acquire(&bcache.lock);
 
   int hid = HASH(blockno);
-  // Is the block already cached?
-  //
-  acquire(&bcache.buffer[hid].lock);
-  for (int i = hid; i < NBUF; i += NBUCKET) {
-	  b = &bcache.buf[i];
-    if(b->dev == dev && b->blockno == blockno){
-      b->refcnt++;
-  	  release(&bcache.buffer[hid].lock);
-      release(&bcache.lock);
-      acquiresleep(&b->lock);
-      return b;
-    }
-  }
-  release(&bcache.buffer[hid].lock);
 
-  acquire(&bcache.buffer[hid].lock);
-  	for (int i = hid; i < NBUF; i += NBUCKET) {
-	  	b = &bcache.buf[i];
-    	if(b->refcnt == 0) {
-      		b->dev = dev;
-      		b->blockno = blockno;
-      		b->valid = 0;
-      		b->refcnt = 1;
-  			release(&bcache.buffer[hid].lock);
-      		release(&bcache.lock);
-      		acquiresleep(&b->lock);
-      		return b;
-    	}
-  	}
-  release(&bcache.buffer[hid].lock);
-  // Not cached.
-  // Recycle the least recently used (LRU) unused buffer.
-  for (int k = 0; k < NBUCKET; k ++) {
-	  if (k == hid) continue;
+  for (int p = 0, k = hid; p < NBUCKET; p ++) {
+	 	k = (p + hid) % NBUCKET;
   	acquire(&bcache.buffer[k].lock);
   	for (int i = k; i < NBUF; i += NBUCKET) {
 	  	b = &bcache.buf[i];
-    	if(b->refcnt == 0) {
-      		b->dev = dev;
-      		b->blockno = blockno;
-      		b->valid = 0;
-      		b->refcnt = 1;
-  			release(&bcache.buffer[k].lock);
-      		release(&bcache.lock);
+    	if(b->dev == dev && b->blockno == blockno){
+      		b->refcnt++;
+			b->timestamp = ticks;
+  	  		release(&bcache.buffer[k].lock);
+      		// release(&bcache.lock);
       		acquiresleep(&b->lock);
       		return b;
-    	}
-  	}
+		}
+    	if(!have_space && b->refcnt == 0) {
+			have_space = 1;
+			select_i = i;
+		}
+    	if(have_space && b->refcnt == 0 && b->timestamp < min_timestamp) {
+			min_timestamp = b->timestamp;
+			select_i = i;
+		}
+		if(!have_space && b->timestamp < min_timestamp) {
+			min_timestamp = b->timestamp;
+			select_i = i;
+		}
+    }
   	release(&bcache.buffer[k].lock);
   }
+
+  // Not cached.
+  // Recycle the least recently used (LRU) unused buffer.
+  b = &bcache.buf[select_i];
+  // hid = HASH(select_i);
+  acquire(&bcache.buffer[hid].lock);
+    {
+      	b->dev = dev;
+      	b->blockno = blockno;
+      	b->valid = 0;
+      	b->refcnt = 1;
+		b->timestamp = ticks;
+    	release(&bcache.buffer[hid].lock);
+      	// release(&bcache.lock);
+      	acquiresleep(&b->lock);
+      	return b;
+   	}
   panic("bget: no buffers");
 }
 
